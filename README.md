@@ -69,8 +69,12 @@ pip install -r requirements.txt
 
 ```ini
 OPENAI_API_KEY=sk-proj-12345...
-OPENAI_MODEL=gpt-4o
-CHROMA_PATH=~/.local/share/manual-master/chroma_db
+OPENAI_MODEL=gpt-4o-mini
+CHROMA_PATH=~/my_cache/chroma_db
+
+# Optional: LangSmith Tracing
+LANGCHAIN_TRACING_V2=true
+LANGSMITH_API_KEY=lsv2_pt_...
 ```
 
 ### Environment Variables Guide
@@ -79,12 +83,15 @@ CHROMA_PATH=~/.local/share/manual-master/chroma_db
 | :--- | :--- | :--- |
 | `OPENAI_API_KEY` | **Required** | Your OpenAI API key. |
 | `OPENAI_MODEL` | `gpt-5-mini` | The Chat Model to use (e.g., `gpt-4o`, `gpt-3.5-turbo`). |
+| `TEMPERATURE` | `0.0` | Controls randomness of the output (0.0 is deterministic, 1.0 is creative). |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Model used for vectorizing text. |
 | `CHROMA_PATH` | `~/.local/share/manual-master/chroma_db` | Storage location. Adheres to the **XDG Base Directory specification** for user data. |
 | `SYSTEM_PROMPT_PATH`| `None` | Path to a custom text file containing the AI persona rules. |
 | `CHUNK_SIZE` | `1000` | Number of characters per text chunk. |
 | `CHUNK_OVERLAP` | `200` | Overlap between chunks to maintain context. |
 | `RETRIEVAL_K` | `30` | Number of document chunks to retrieve per query. |
+| `LANGCHAIN_TRACING_V2` | `false` | Set to `true` to enable LangSmith tracing. |
+| `LANGSMITH_API_KEY` | `None` | Your LangSmith API Key (for LangSmith tracing). |
 
 ---
 
@@ -144,11 +151,14 @@ The script automatically detects this file. Alternatively, point to a specific f
 
 ```text
 .
-├── main.py                  # The entry point script
+├── src/
+│   └── main.py              # The entry point script
+├── prompts/
+│   └── system_prompt.txt    # (Optional) Custom system instructions
 ├── .env                     # Environment variables (API Keys)
+├── README.md                # This file
 ├── requirements.txt         # Python dependencies
-└── prompts/
-    └── system_prompt.txt    # (Optional) Custom system instructions
+└── LICENSE                  # License file
 ```
 
 ---

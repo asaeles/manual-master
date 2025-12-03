@@ -36,16 +36,15 @@ except NameError:
 # This ensures it works even if you run the script from a different directory.
 load_dotenv(PROJECT_ROOT / ".env")
 
-
 # --- CONFIGURATION CENTER ---
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 CHROMA_PATH = os.getenv("CHROMA_PATH", "~/.local/share/manual-master/chroma_db")
 SYSTEM_PROMPT_PATH = os.getenv("SYSTEM_PROMPT_PATH", None)
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "30"))
-TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
 
 # Default prompt used if no file is found
 DEFAULT_SYSTEM_PROMPT = """You are a specialized strict assistant for document analysis.
@@ -492,6 +491,13 @@ def parse_args(argv):
 
 if __name__ == "__main__":
     CHROMA_PATH = resolve_path(CHROMA_PATH)
+
+    # Ensure the CHROMA_PATH directory exists (create recursively if needed)
+    try:
+        CHROMA_PATH.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create CHROMA_PATH '{CHROMA_PATH}': {e}")
+
     args = parse_args(sys.argv[1:])
     # Apply path resolution (handling ~, %VAR%) to the user input argument
     input_path = resolve_path(args.path)
