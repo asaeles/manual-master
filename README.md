@@ -156,9 +156,9 @@ The script automatically detects this file. Alternatively, point to a specific f
 ├── prompts/
 │   └── system_prompt.txt    # (Optional) Custom system instructions
 ├── .env                     # Environment variables (API Keys)
+├── LICENSE                  # License file
 ├── README.md                # This file
-├── requirements.txt         # Python dependencies
-└── LICENSE                  # License file
+└── requirements.txt         # Python dependencies
 ```
 
 ---
