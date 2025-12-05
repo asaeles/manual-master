@@ -225,48 +225,94 @@ def load_file_content(path_obj: Path, safe_path: str, mime_type: str, root_path:
         return []
 
 
-def get_hashed_db_path(source_path: Path) -> str:
+def scan_content_and_hash(source_root: Path) -> Tuple[str, List[Path]]:
     """
-    Generates a deterministic filesystem path for the vector database based on the source path.
+    Scans the directory for relevant files and generates a deterministic hash
+    based on the file contents (header + tail + size), NOT the filename or directory path.
 
-    This ensures that the same source directory always maps to the same ChromaDB collection folder.
-    It handles path normalization (stripping trailing slashes, lowercasing on Windows) to prevent
-    duplicate caches for the same location.
-
+    This implements "Content-Based Addressing" for the database cache.
+    Renaming the folder or files will NOT break the cache/hash as long as content matches.
+    
     Args:
-        source_path (Path): The input file or directory being processed.
-
+        source_root (Path): The root directory or file to scan.
+        
     Returns:
-        str: The absolute path to the specific ChromaDB folder for this source.
+        Tuple[str, List[Path]]: A tuple containing the (master_hex_hash, list_of_valid_paths).
     """
-    # Resolve absolute path (pathlib handles normalizations like ../ and ./)
-    abs_path_obj = source_path.resolve()
+    signatures = []
+    valid_files = []
+    
+    # Extensions to consider for the hash. We filter here for speed during the hash phase.
+    # We purposefully exclude .exe, .dll, etc. to avoid hashing massive binaries unnecessarily.
+    relevant_extensions = {'.pdf', '.txt', '.html', '.htm', '.xml', '.md'}
+    
+    # Normalize input
+    items_to_scan = []
+    if source_root.is_file():
+        items_to_scan = [source_root]
+    elif source_root.is_dir():
+        for root, dirs, files in os.walk(source_root):
+            for file in files:
+                items_to_scan.append(Path(root) / file)
+    else:
+        return hashlib.sha256(b'empty').hexdigest(), []
 
-    # Convert to string
-    path_str = str(abs_path_obj)
+    print(f"Scanning content signature for {len(items_to_scan)} items...")
 
-    # NORMALIZATION:
-    # 1. Strip trailing separator (redundant for pathlib but safe for string manipulations)
-    path_str = path_str.rstrip(os.sep)
+    for path in items_to_scan:
+        # Fast extension check
+        if path.suffix.lower() not in relevant_extensions:
+            continue
 
-    # 2. On Windows, normalize case to prevent "MyFolder" vs "myfolder" hash mismatch
-    if os.name == 'nt':
-        path_str = path_str.lower()
+        try:
+            # 1. Get Size
+            size = path.stat().st_size
+            
+            # 2. Read Head (and Tail) safely as binary
+            # Reading tail ensures we distinguish files that share a common header (like PDF templates)
+            with open(path, "rb") as f:
+                header = f.read(1024)
+                
+                # Logic to read tail if file is large enough
+                tail = b''
+                if size > 2048:
+                    f.seek(-1024, 2) # Seek to 1024 bytes before end
+                    tail = f.read(1024)
+            
+            # 3. Create component hash (Size + Header + Tail)
+            # We encode size to ascii bytes to safely mix with binary data
+            # Filename is EXCLUDED from the hash to allow renaming
+            file_data = str(size).encode('ascii') + header + tail
+            file_sig = hashlib.sha256(file_data).hexdigest()
+            
+            signatures.append(file_sig)
+            valid_files.append(path)
+            
+        except (IOError, OSError) as e:
+            # If unreadable, we skip it for the hash (and thus for ingestion)
+            # OR we could add an error signature. Skipping is safer for stability.
+            continue
 
-    path_bytes = path_str.encode('utf-8')
-    hash_digest = hashlib.sha256(path_bytes).hexdigest()
-
-    # Join with the resolved global CHROMA_PATH
-    return os.path.join(CHROMA_PATH, hash_digest)
+    # 4. Sort signatures to ensure directory traversal order doesn't matter (Determinism)
+    signatures.sort()
+    
+    # 5. Master Hash
+    # We hash the concatenated sorted signatures
+    if not signatures:
+        return hashlib.sha256(b'empty').hexdigest(), []
+        
+    master_hash = hashlib.sha256("".join(signatures).encode('ascii')).hexdigest()
+    
+    return master_hash, valid_files
 
 
 def process_documents(source_path: Path):
     """
     Orchestrates the ingestion pipeline.
 
-    1. Checks if a valid ChromaDB already exists for this path.
-    2. If not, scans the directory for supported files.
-    3. Loads content, splits text into chunks, and generates embeddings.
+    1. Scans and Hashes content to identify the unique dataset.
+    2. Checks if a valid ChromaDB already exists for this content hash.
+    3. If not, uses the *already scanned* list to ingest files.
     4. Persists the vector store to disk.
 
     Args:
@@ -275,43 +321,39 @@ def process_documents(source_path: Path):
     Returns:
         Tuple[Chroma, str]: The loaded VectorStore object and the path to the DB.
     """
-    # 1. Check for existing DB FIRST before scanning files
-    db_path = get_hashed_db_path(source_path)
+    
+    # 1. Scan Content & Generate Hash (One-Pass)
+    content_hash, files_to_process = scan_content_and_hash(source_path)
+    
+    # Construct DB path based on CONTENT hash, not directory path
+    db_path = os.path.join(CHROMA_PATH, content_hash)
     embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
+    # 2. Check for existing DB
     if os.path.exists(db_path) and os.listdir(db_path):
         print(f"Checking for existing database at: {db_path}")
         try:
             vector_store = Chroma(persist_directory=db_path, embedding_function=embeddings)
             if vector_store._collection.count() > 0:
-                print("Found valid existing database. Skipping file processing.")
+                print("Found valid existing database (Content Match). Skipping processing.")
                 return vector_store, db_path
         except Exception as e:
-            print(f"Existing DB corrupt or unreadable, rebuilding. Error: {e}")
+            print(f"Existing DB corrupt, rebuilding. Error: {e}")
 
-    # 2. Identify Files (Only if DB missing)
-    files_to_process = []
-
-    if source_path.is_file():
-        files_to_process.append(source_path)
-    elif source_path.is_dir():
-        for root, dirs, files in os.walk(source_path):
-            for file in files:
-                files_to_process.append(Path(root) / file)
-    else:
-        raise ValueError("Invalid path provided.")
+    # 3. Ingest (if DB missing)
+    if not files_to_process:
+        print("\nNo supported files found to process (checked extensions: .pdf, .txt, .html, .xml).")
+        sys.exit(0)
 
     all_docs = []
-    print(f"Scanning {len(files_to_process)} items in '{source_path.name}'...\n")
+    print(f"\nIngesting {len(files_to_process)} items based on content signature...\n")
     print(f"{'File Name':<40} | {'Size':<10} | {'Type':<20}")
     print("-" * 80)
 
-    # 3. Process Files
-    valid_extensions = ['.pdf', '.txt', '.html', '.xml']
-
     # Define root for relative paths if input is a directory
     root_context = source_path if source_path.is_dir() else None
-
+    
+    # Reuse the list from the hash scan!
     for file_path in files_to_process:
         try:
             # Generate safe path string for I/O operations
@@ -323,15 +365,12 @@ def process_documents(source_path: Path):
             # Use original file_path for extension checks, safe_path for opening files
             mime_type, encoding = detect_file_info(file_path, safe_path)
 
-            # Check if supported
-            is_supported = False
-            if 'pdf' in mime_type: is_supported = True
-            elif 'text' in mime_type: is_supported = True
-            elif 'xml' in mime_type: is_supported = True
-            elif 'html' in mime_type: is_supported = True
-
-            # Double check against explicit unsupported binary types if magic failed
-            if 'octet-stream' in mime_type and file_path.suffix.lower() not in valid_extensions:
+            # We assume files are valid because they passed the hash scan filter,
+            # but we run the MIME check again to get the *correct loader*.
+            
+            # Simple check for the display
+            is_supported = any(ext in mime_type for ext in ['pdf', 'text', 'xml', 'html', 'plain'])
+            if 'octet-stream' in mime_type and file_path.suffix.lower() not in ['.pdf', '.txt', '.html', '.xml']:
                 is_supported = False
 
             if is_supported:
@@ -345,7 +384,7 @@ def process_documents(source_path: Path):
             print(f"Error accessing {file_path.name}: {e}")
 
     if not all_docs:
-        print("\nNo valid documents found to process.")
+        print("\nNo valid documents extracted.")
         sys.exit(0)
 
     # 4. Build Vector Store

@@ -13,6 +13,7 @@ Point it at any file or directory, and it will ingest the content, store embeddi
 ## Key Features
 
 * **Recursive Directory Scanning:** Ingests entire folders or single files.
+* **Content-Based Caching:** Generates database IDs based on file contents (headers + sizes + tails), not directory paths. **You can rename or move your source folders without breaking the cache or forcing a re-index.**
 * **Multi-Format Support:** Automatically detects and parses:
     * PDFs (`.pdf`)
     * HTML (`.html`, `.htm`)
@@ -105,13 +106,16 @@ python ./src/main.py ~/documents/finance_reports
 ```
 
 ### How it works
-1.  **Scanning:** The script scans the path for supported files.
-2.  **Indexing:** If this is the first time running on this folder, it creates a unique hash of the path and builds a Vector Database in `CHROMA_PATH`.
-3.  **Chat:** It enters an interactive loop where you can ask questions.
+1.  **Scanning:** The script scans the directory for supported files.
+2.  **Fingerprinting:** It reads file headers, tails, and sizes to generate a deterministic "Content Hash". This ensures that the cache is tied to *what* the files are, not *where* they are.
+3.  **Indexing:** If a database with this content signature exists, it loads instantly. If not, it builds the Vector Database in `CHROMA_PATH`.
+4.  **Chat:** It enters an interactive loop where you can ask questions.
 
 ### Interactive Session Example
 ```text
-Scanning 5 items in 'finance_reports'...
+Scanning content signature for 5 items...
+Ingesting 2 items based on content signature...
+
 report_2023.pdf                          | 2.50MB     | application/pdf     
 notes.txt                                | 12.00KB    | text/plain          
 
@@ -169,8 +173,10 @@ The script automatically detects this file. Alternatively, point to a specific f
     * See the **System Dependencies** section above. Windows users ensure you installed `python-magic-bin`.
 * **`RateLimitError`**: 
     * Check your OpenAI quota. You may need to switch `EMBEDDING_MODEL` to an older version or add credits.
-* **Database Path Issues**: 
-    * The script uses a hash of the *absolute path* of your input folder to determine which DB to load. If you move the source folder, the script will treat it as new data and rebuild the index.
+* **Database Cache**: 
+    * The script uses a **Content Hash** (Header + Size + Tail) to identify datasets. 
+    * **Renaming Folders:** Safe. The cache will still match.
+    * **Modifying Files:** If you edit a file (changing its size or header), the content hash changes, and the tool will create a new, separate database for the new state. It does not perform incremental updates.
 
 ---
 
