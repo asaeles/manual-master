@@ -341,6 +341,7 @@ def process_documents(source_path: Path):
             print(f"Existing DB corrupt, rebuilding. Error: {e}")
 
     # 3. Ingest (if DB missing)
+    print(f"Database not found at: {db_path}")
     if not files_to_process:
         print("\nNo supported files found to process (checked extensions: .pdf, .txt, .html, .xml).")
         sys.exit(0)
