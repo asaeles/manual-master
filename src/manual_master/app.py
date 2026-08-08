@@ -9,8 +9,8 @@ from typing import List, Tuple, Optional, Any
 import magic
 from dotenv import load_dotenv
 
-# LangChain Imports
-from langchain.agents import create_agent
+# LangGraph & LangChain Imports
+from langgraph.prebuilt import create_react_agent
 from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langchain_core.documents import Document
@@ -25,8 +25,8 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader, BSHTML
 # --- PROJECT STRUCTURE ---
 # Robustly determine project root regardless of where script is run from
 try:
-    # Assuming main.py is inside /src/, we go up two levels to find the root
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    # Assuming app.py is inside /src/manual_master/, we go up three levels to find the root
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 except NameError:
     # Fallback for interactive shells
     PROJECT_ROOT = Path(".").resolve()
@@ -491,10 +491,10 @@ def invoke_agent(db_path: str, query: str) -> Any:
              # Only warn if the user explicitly set a path that doesn't exist
              print(f"Warning: Configured system prompt file not found at: {target_prompt_path}. Using default.")
 
-    agent = create_agent(
+    agent = create_react_agent(
         model=llm,
         tools=[retrieve_docs],
-        system_prompt=system_prompt
+        state_modifier=system_prompt
     )
 
     result = agent.invoke(
@@ -529,7 +529,8 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-if __name__ == "__main__":
+def main():
+    global CHROMA_PATH
     CHROMA_PATH = resolve_path(CHROMA_PATH)
 
     # Ensure the CHROMA_PATH directory exists (create recursively if needed)
@@ -572,3 +573,7 @@ if __name__ == "__main__":
             break
         except Exception as e:
             print(f"An error occurred: {e}")
+
+
+if __name__ == "__main__":
+    main()
