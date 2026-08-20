@@ -15,4 +15,4 @@ dependencies = [
 ]
 
 [project.scripts]
-manual-master = "manual-master.__main__:main"
+manual-master = "manual_master.__main__:main"
