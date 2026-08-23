@@ -3,6 +3,10 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+RUN apt-get update && \
+    apt-get install -y libmagic1 && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN useradd -m appuser
 WORKDIR /app
 RUN mkdir output && chown -R appuser:appuser /app

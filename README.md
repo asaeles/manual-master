@@ -28,39 +28,7 @@ Point it at any file or directory, and it will ingest the content, store embeddi
 
 ## Installation
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/asaeles/manual-master.git
-cd manual-master
-```
-
-### 2. System Dependencies (Critical)
-This tool uses `python-magic` for file type detection. You must have the underlying C-library installed.
-
-* **MacOS (Homebrew):**
-    ```bash
-    brew install libmagic
-    ```
-* **Linux (Debian/Ubuntu):**
-    ```bash
-    sudo apt-get install libmagic1
-    ```
-* **Windows:**
-    You usually need `python-magic-bin` instead of `python-magic`.
-    ```bash
-    pip install python-magic-bin
-    ```
-
-### 3. Python Dependencies
-Install the required Python packages:
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Configuration
+### Configuration
 
 1.  Create a `.env` file in the project root.
 2.  Add your OpenAI API Key (Required).
@@ -78,7 +46,40 @@ LANGCHAIN_TRACING_V2=true
 LANGSMITH_API_KEY=lsv2_pt_...
 ```
 
-### Environment Variables Guide
+### Option 1: Direct installation (local development)
+**System Dependencies (Critical)**
+This tool uses `python-magic` for file type detection. You must have the underlying C-library installed.
+
+* **MacOS (Homebrew):**
+    ```bash
+    brew install libmagic
+    ```
+* **Linux (Debian/Ubuntu):**
+    ```bash
+    sudo apt-get install libmagic1
+    ```
+* **Windows:**
+    For Windows `python-magic-bin` is already added to the dependencies.
+```bash
+# Install dependencies
+pip install -e .
+```
+
+### Option 2: Docker deployment
+
+The project includes a `Dockerfile` for containerized deployment. The image automatically installs:
+- Python 3.12-slim base
+- Libmagic installation
+- All required dependencies
+
+Build and run with Docker:
+```bash
+docker build -t check-fines-eg .
+docker run -v ~/documents:/app/documents \
+           check-fines-eg /app/documents
+```
+
+## Environment Variables Guide
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
@@ -101,8 +102,20 @@ LANGSMITH_API_KEY=lsv2_pt_...
 Run the script by providing a path to a file or a folder.
 
 ### Basic Usage
+
+**Using Python module:**
 ```bash
-python ./src/main.py ~/documents/finance_reports
+python -m manual_master ~/documents
+```
+
+**Direct execution:**
+```bash
+python src/manual_master/app.py ~/documents
+```
+
+**Or using the installed CLI command:**
+```bash
+manual_master ~/documents
 ```
 
 ### How it works
@@ -162,7 +175,7 @@ The script automatically detects this file. Alternatively, point to a specific f
 ├── .env                     # Environment variables (API Keys)
 ├── LICENSE                  # License file
 ├── README.md                # This file
-└── requirements.txt         # Python dependencies
+└── pyproject.toml           # Python dependencies
 ```
 
 ---
