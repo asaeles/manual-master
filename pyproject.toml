@@ -17,7 +17,7 @@ dependencies = [
     "langchain-community",
     "langchain-openai",
     "python-magic; sys.platform != \"win32\"",
-    "python-magic-bin==0.4.14; sys.platform == \"win32\"",
+    "python-magic-bin; sys.platform == \"win32\"",
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
